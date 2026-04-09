@@ -271,22 +271,36 @@ def calculate_sort_score(flag, monthly_profit_at_risk):
 # Section D: Data Loading & Analysis
 # ---------------------------------------------------------------------------
 
-def load_csv(filepath):
-    """Read inventory CSV and convert numeric fields."""
+def load_data(filepath):
+    """Read inventory data from CSV or JSON and convert numeric fields."""
+    ext = os.path.splitext(filepath)[1].lower()
+
+    if ext == ".json":
+        with open(filepath, "r", encoding="utf-8") as f:
+            raw_rows = json.load(f)
+        if not isinstance(raw_rows, list):
+            raise ValueError("JSON file must contain a list of objects.")
+    elif ext == ".csv" or ext == "":
+        raw_rows = []
+        with open(filepath, "r", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                raw_rows.append(row)
+    else:
+        raise ValueError(f"Unsupported file format: {ext}. Use .csv or .json.")
+
     products = []
-    with open(filepath, "r", newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            row["current_stock"] = int(row["current_stock"])
-            row["reorder_point"] = int(row["reorder_point"])
-            row["supplier_lead_time"] = int(row["supplier_lead_time"])
-            row["shipping_time"] = int(row["shipping_time"])
-            row["receiving_buffer"] = int(row["receiving_buffer"])
-            row["base_velocity"] = float(row["base_velocity"])
-            row["avg_daily_velocity"] = float(row["avg_daily_velocity"])
-            row["unit_cost"] = float(row["unit_cost"])
-            row["unit_price"] = float(row["unit_price"])
-            products.append(row)
+    for row in raw_rows:
+        row["current_stock"] = int(row["current_stock"])
+        row["reorder_point"] = int(row["reorder_point"])
+        row["supplier_lead_time"] = int(row["supplier_lead_time"])
+        row["shipping_time"] = int(row["shipping_time"])
+        row["receiving_buffer"] = int(row["receiving_buffer"])
+        row["base_velocity"] = float(row["base_velocity"])
+        row["avg_daily_velocity"] = float(row["avg_daily_velocity"])
+        row["unit_cost"] = float(row["unit_cost"])
+        row["unit_price"] = float(row["unit_price"])
+        products.append(row)
     return products
 
 
@@ -1336,7 +1350,7 @@ def generate_html(data, ai_results, config=None):
                 <button onclick="window.print()" class="px-3 py-1.5 text-sm bg-white text-[#333333] rounded-lg hover:bg-[#F5F5F5] border border-[#D1D5DB] transition">
                     Print
                 </button>
-                <button onclick="alert('To upload new data, re-run the tool with: python oos_tool.py --input your_file.csv')" class="px-3 py-1.5 text-sm bg-white text-[#333333] rounded-lg hover:bg-[#F5F5F5] border border-[#D1D5DB] transition">
+                <button onclick="alert('To upload new data, re-run the tool with: python oos_tool.py --input your_file.csv (or .json)')" class="px-3 py-1.5 text-sm bg-white text-[#333333] rounded-lg hover:bg-[#F5F5F5] border border-[#D1D5DB] transition">
                     Upload New Data
                 </button>
                 <button onclick="toggleSettings()" class="p-1.5 text-[#555555] hover:text-[#1a1a1a] transition" title="Settings">
@@ -2013,7 +2027,7 @@ def main():
             os.path.dirname(os.path.abspath(__file__)),
             "sample_data", "inventory.csv"
         ),
-        help="Path to inventory CSV file (default: sample_data/inventory.csv)",
+        help="Path to inventory CSV or JSON file (default: sample_data/inventory.csv)",
     )
     parser.add_argument(
         "--output",
@@ -2041,7 +2055,7 @@ def main():
         print(f"ERROR: File not found: {args.input}")
         sys.exit(1)
 
-    products = load_csv(args.input)
+    products = load_data(args.input)
     print(f"  Loaded {len(products)} products")
 
     # Analyze
