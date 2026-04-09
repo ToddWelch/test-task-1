@@ -256,11 +256,9 @@ All AI outputs are clearly labeled in the dashboard and are optional. The tool f
 
 | Phase | Time |
 |---|---|
-| Data generation and synthetic dataset | 0.5 hours |
-| Build plan and architecture design | 1.0 hours |
-| Seasonal projection engine and scoring | 1.0 hours |
-| AI integration layer | 0.5 hours |
-| HTML dashboard (layout, interactivity, JS) | 2.0 hours |
-| README and documentation | 1.0 hours |
-| Testing and refinement | 0.5 hours |
-| **Total** | **6.5 hours** |
+| Planning and architecture design | 2.0 hours |
+| Development (scoring engine, data generation, HTML dashboard) | 1.25 hours |
+| AI implementation and testing | 0.75 hours |
+| Testing and UI refinement | 0.25 hours |
+| Third-party review, fixes, and documentation | 0.75 hours |
+| **Total** | **5.0 hours** |
