@@ -304,6 +304,100 @@ def load_data(filepath):
     return products
 
 
+def validate_data(rows):
+    """Validate loaded inventory data. Returns (cleaned_rows, warnings).
+
+    Checks for:
+    - Required columns present
+    - Non-negative numeric values
+    - Parseable dates
+    - Duplicate SKUs (warns and keeps first occurrence)
+    - Lead time column presence
+
+    Raises ValueError if critical columns are missing entirely.
+    """
+    warnings = []
+
+    if not rows:
+        raise ValueError("No data rows found in input file.")
+
+    # Check required columns
+    required_columns = [
+        "sku", "product_name", "category", "current_stock",
+        "base_velocity", "avg_daily_velocity", "unit_cost", "unit_price",
+        "supplier", "last_restock_date",
+    ]
+    sample = rows[0]
+    missing = [col for col in required_columns if col not in sample]
+    if missing:
+        raise ValueError(
+            f"Missing required columns: {', '.join(missing)}. "
+            "Cannot proceed without these fields."
+        )
+
+    # Check lead time columns
+    has_split_lead = all(
+        col in sample
+        for col in ("supplier_lead_time", "shipping_time", "receiving_buffer")
+    )
+    has_single_lead = "lead_time" in sample
+    if not has_split_lead and not has_single_lead:
+        warnings.append(
+            "No lead time columns found. Will use default lead time from config."
+        )
+
+    # Validate each row
+    non_negative_fields = [
+        "current_stock", "base_velocity", "avg_daily_velocity",
+        "unit_cost", "unit_price",
+    ]
+    seen_skus = set()
+    cleaned = []
+
+    for i, row in enumerate(rows):
+        row_num = i + 1
+
+        # Duplicate SKU check
+        sku = row.get("sku", "")
+        if sku in seen_skus:
+            warnings.append(
+                f"Row {row_num}: Duplicate SKU '{sku}' (keeping first occurrence)."
+            )
+            continue
+        seen_skus.add(sku)
+
+        # Non-negative value checks
+        for field in non_negative_fields:
+            if field in row:
+                try:
+                    val = float(row[field])
+                    if val < 0:
+                        warnings.append(
+                            f"Row {row_num} ({sku}): Negative value for {field} ({val}). "
+                            "Setting to 0."
+                        )
+                        row[field] = 0
+                except (ValueError, TypeError):
+                    warnings.append(
+                        f"Row {row_num} ({sku}): Invalid value for {field}. Setting to 0."
+                    )
+                    row[field] = 0
+
+        # Date validation
+        if "last_restock_date" in row:
+            try:
+                datetime.strptime(str(row["last_restock_date"]), "%Y-%m-%d")
+            except (ValueError, TypeError):
+                warnings.append(
+                    f"Row {row_num} ({sku}): Invalid date format for last_restock_date "
+                    f"('{row.get('last_restock_date')}'). Expected YYYY-MM-DD."
+                )
+
+        cleaned.append(row)
+
+    return cleaned, warnings
+
+
 def analyze_inventory(products, config=None, today=None):
     """Main analysis pipeline. Returns dict with products, summary,
     categories, and needs_investigation."""
@@ -2055,8 +2149,11 @@ def main():
         print(f"ERROR: File not found: {args.input}")
         sys.exit(1)
 
-    products = load_data(args.input)
-    print(f"  Loaded {len(products)} products")
+    raw_products = load_data(args.input)
+    products, validation_warnings = validate_data(raw_products)
+    print(f"  {len(products)} products loaded. {len(validation_warnings)} warnings.")
+    for w in validation_warnings:
+        print(f"    WARNING: {w}")
 
     # Analyze
     print("\nRunning seasonal projection analysis...")
