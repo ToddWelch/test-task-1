@@ -30,10 +30,10 @@ The tool separates concerns cleanly:
 
 A simpler implementation would collapse flags and tiers into one dimension. I separated them because that is how real operators make decisions:
 
-- **Urgency Flags** answer "When do I need to act?" A product can be Red (needs restock now) but only Watch tier (low financial impact). The operator knows it is urgent but not a priority over bigger items.
+- **Urgency Flags** answer "When do I need to act?" A product can be Red (needs restock now) but only Low tier (low financial impact). The operator knows it is urgent but not a priority over bigger items.
 - **Risk Tiers** answer "Where should I focus?" A product can be Healthy (plenty of stock) but Critical tier ($5K+/month in profit). The operator knows to keep an eye on it even though it is not urgent today.
 
-The sort algorithm combines both: flag weight (urgency) plus monthly profit at risk (financial impact). This puts the worst combination (OOS + Critical) at the top and Healthy + Watch at the bottom.
+The sort algorithm combines both: flag weight (urgency) plus monthly profit at risk (financial impact). This puts the worst combination (OOS + Critical) at the top and Healthy + Low at the bottom.
 
 ### Seasonal Projection vs. Flat Velocity
 
