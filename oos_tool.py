@@ -1848,7 +1848,7 @@ def generate_html(data, ai_results, config=None):
             let trendHtml = '';
             if (p.trend) {{
                 const dir = p.trend.direction;
-                let trendArrow = '&#8212;';
+                let trendArrow = '&#8722;';
                 let trendColor = '#2563EB';
                 let trendLabel = 'Stable';
                 if (dir === 'increasing') {{ trendArrow = '&#9650;'; trendColor = '#059669'; trendLabel = 'Demand Increasing'; }}
