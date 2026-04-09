@@ -229,26 +229,26 @@ Default target is 60 days on hand after restock arrives. This is configurable in
 
 ## AI Tools Used
 
+### Claude (claude.ai, Planning and Architecture)
+
+Used as a strategic thinking partner for planning the entire tool before writing any code. Designed the two-layer scoring model (urgency flags vs financial risk tiers). Developed the seasonal projection approach based on real inventory management experience. Defined the data model, synthetic data parameters, and supplier structure. Wrote all AI prompt templates with anti-hallucination guardrails. Generated the synthetic dataset (generate_data.py) with realistic equestrian product data calibrated against real e-commerce inventory patterns.
+
 ### Claude Code (Development)
 
-Claude Code served as the development assistant for building the entire tool. Specifically:
-
-- Designed the architecture (seasonal projection engine, two-layer scoring, HTML dashboard structure)
-- Wrote all Python code (data loading, analysis pipeline, AI integration, HTML generation, CLI)
-- Wrote all JavaScript for the interactive dashboard (sorting, filtering, search, settings persistence, live recalculation)
-- Generated the synthetic dataset with realistic equestrian product distributions
-- Built the Tailwind CSS dashboard with light theme styled to match the Schneider Saddlery website, responsive layout, and print styles
+Served as the implementation engine, translating the architecture plan into working code. Built all Python code (data loading, validation, seasonal projection, scoring, AI integration, HTML generation). Built all JavaScript for the interactive dashboard (sorting, filtering, search, settings persistence, live recalculation). Styled the dashboard to match the Schneider Saddlery website. Implemented iterative refinements based on testing feedback.
 
 ### Claude API (Sonnet, Runtime Insights)
 
 The deployed tool calls Claude Sonnet (temperature 0.3) at runtime for up to 18 API calls across four sections:
 
-1. **Executive Summary (1 call):** Receives aggregated stats, flag/tier distributions, top urgent items, category breakdowns with seasonal data, and investigation items. Returns a 3-4 paragraph briefing suitable for a Monday morning operations meeting.
-2. **Category Patterns (1 call):** Receives category aggregations with supplier distributions and seasonal coefficients. Returns category-level analysis identifying concentration risks, seasonal observations, and investigation notes for long-OOS items.
-3. **Investigation Summary (1 call):** Receives data on long-OOS and stale inventory items. Returns analysis of items requiring manual review.
-4. **Per-SKU Recommendations (up to 15 calls):** Each Critical/High tier item with a Red/Purple flag gets its own individual API call. Receives detailed data for one product at a time to prevent cross-item contamination. Returns 1-2 sentence actionable recommendations referencing specific velocity, lead time, seasonal trend, and profit data.
+1. **Executive Summary (1 call):** A 3-4 paragraph Monday morning briefing with seasonal context.
+2. **Category Patterns (1 call):** Per-category analysis with supplier concentration risks.
+3. **Investigation Summary (1 call):** Analysis of long-OOS items requiring sourcing decisions.
+4. **Per-SKU Recommendations (up to 15 calls):** Individual actionable recommendations for highest-priority items.
 
-All AI outputs are clearly labeled in the dashboard and are optional. The tool functions fully without them.
+### OpenAI (ChatGPT and Codex, Review and Quality Assurance)
+
+Used as an independent reviewer to stress-test the plan and implementation. ChatGPT reviewed the build plan and scoring logic, identifying gaps including JSON support, validation layer, Fulfil.io sourcing concerns, and missed profit heuristic labeling. Codex performed two full code reviews of the implementation, catching a critical XSS vulnerability, action-set inconsistencies, em dash violation, and README-to-code misalignments. All findings were triaged and fixed before submission.
 
 ---
 
