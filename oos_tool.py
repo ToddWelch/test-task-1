@@ -1076,7 +1076,7 @@ def clean_ai_text(text):
 def generate_html(data, ai_results, config=None):
     """Generate self-contained HTML dashboard."""
     cfg = config or DEFAULT_CONFIG
-    products_json = json.dumps(data["products"], default=str)
+    products_json = json.dumps(data["products"], default=str).replace('</','<\\/')
     summary = data["summary"]
     categories = data["categories"]
     investigation = data["needs_investigation"]
@@ -1178,10 +1178,10 @@ def generate_html(data, ai_results, config=None):
 
     # Build the SKU recs JSON for embedding (pre-convert markdown to HTML)
     sku_recs_cleaned = {sku: clean_ai_text(text) for sku, text in sku_recs.items()}
-    sku_recs_json = json.dumps(sku_recs_cleaned)
+    sku_recs_json = json.dumps(sku_recs_cleaned).replace('</','<\\/')
 
     # Seasonality JSON for JS recalculation
-    seasonality_json = json.dumps(SEASONALITY)
+    seasonality_json = json.dumps(SEASONALITY).replace('</','<\\/')
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -1523,14 +1523,15 @@ def generate_html(data, ai_results, config=None):
     const SEASONALITY = {seasonality_json};
     const DAYS_PER_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const FLAG_COLORS = {json.dumps(FLAG_COLORS)};
-    const FLAG_WEIGHTS = {json.dumps(FLAG_WEIGHTS)};
+    const FLAG_COLORS = {json.dumps(FLAG_COLORS).replace('</','<\\/')};
+    const FLAG_WEIGHTS = {json.dumps(FLAG_WEIGHTS).replace('</','<\\/')};
+
     const TIER_ORDER = {{"Critical": 4, "High": 3, "Medium": 2, "Low": 1}};
     const TIER_WEIGHTS = {{"Critical": 4000000, "High": 3000000, "Medium": 2000000, "Low": 1000000}};
     const FLAG_ORDER = {{"OOS": 6, "Restock Now": 5, "Restock Soon": 4, "Watch": 3, "No Velocity": 1, "Healthy": 2}};
     const AI_AVAILABLE = {'true' if ai_available else 'false'};
 
-    const DEFAULTS = {json.dumps(DEFAULT_CONFIG)};
+    const DEFAULTS = {json.dumps(DEFAULT_CONFIG).replace('</','<\\/')};
 
     let currentProducts = JSON.parse(JSON.stringify(ALL_PRODUCTS));
     let sortCol = 'sort_score';
