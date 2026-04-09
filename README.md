@@ -23,7 +23,7 @@ The tool separates concerns cleanly:
 1. **Data loading** reads any CSV with the expected columns and converts types. Includes input validation: checks for required columns, non-negative stock and velocity values, date parsing, and duplicate SKU detection. Validation warnings are printed to console during processing
 2. **Seasonal projection engine** walks forward day-by-day through the calendar consuming stock at seasonally-adjusted rates
 3. **Scoring engine** applies deterministic, configurable rules for urgency flags and financial risk tiers
-4. **AI layer** makes 3 Claude API calls for natural language insights (gracefully optional)
+4. **AI layer** makes up to 18 API calls across four sections: one executive summary, one category analysis, one investigation summary, and up to 15 individual per-SKU recommendations (gracefully optional)
 5. **HTML generator** produces a single-file HTML report with embedded data and interactive JavaScript (Tailwind CSS loaded via CDN requires internet access for styling)
 
 ### Two-Layer Scoring: Why Separate Urgency from Financial Impact
@@ -80,7 +80,12 @@ python oos_tool.py --no-ai
 
 # Custom input/output paths
 python oos_tool.py --input custom_inventory.csv --output reports/my_report.html
+
+# JSON input
+python oos_tool.py --input inventory.json
 ```
+
+Accepts both CSV and JSON input files. JSON should contain a list of objects with the same field names as CSV columns.
 
 ### View the Report
 
@@ -94,7 +99,7 @@ The assessment brief specifies a lead_time_days field. This tool provides more g
 
 ## Fulfil.io Integration Plan
 
-Reference: [Fulfil.io Developer Documentation](https://developers.fulfil.io)
+Reference: [Fulfil.io Platform API](https://fulfil.io/platform/api/)
 
 ### Authentication
 
@@ -110,7 +115,7 @@ Fulfil supports Personal Access Tokens for server-to-server integrations and OAu
 | `purchase.line` | Lead times, last restock dates | PO-to-receipt history gives actual lead time distributions; latest receipt date becomes last_restock_date |
 | `stock.inventory` | Current stock levels | Real-time on-hand quantities per product per location |
 
-Model names are publicly documented in Fulfil's official Python client library (github.com/fulfilio/fulfil-python-api) and confirmed via third-party integration documentation. Rate limits are 1000+ requests per minute. The API uses standard REST with JSON payloads.
+Model names referenced from Fulfil's official open-source Python client (github.com/fulfilio/fulfil-python-api) and confirmed via public third-party integration documentation. Rate limits are 1000+ requests per minute per [fulfil.io/platform/api/](https://fulfil.io/platform/api/). The API uses standard REST with JSON payloads.
 
 ### Data Flow
 
@@ -124,9 +129,9 @@ A scheduled Python job pulls inventory snapshots every 4-6 hours via the REST AP
 
 ### BigQuery and Shopify
 
-Fulfil offers managed BigQuery export for analytics workloads. This is ideal for long-term velocity trend analysis and historical reporting. The REST API handles real-time stock level queries.
+Fulfil offers managed BigQuery export for analytics workloads per [fulfil.io](https://fulfil.io). This is ideal for long-term velocity trend analysis and historical reporting. The REST API handles real-time stock level queries.
 
-Fulfil has native Shopify Plus integration. In a Schneider deployment, Fulfil would be the inventory source of truth, with Shopify reading from Fulfil for storefront availability. Fulfil is SOC 2 Type II compliant with data encrypted at rest on Google Cloud infrastructure.
+Fulfil has native Shopify Plus integration. In a Schneider deployment, Fulfil would be the inventory source of truth, with Shopify reading from Fulfil for storefront availability. Fulfil is SOC 2 Type II compliant per [fulfil.io](https://fulfil.io), with data encrypted at rest on Google Cloud infrastructure.
 
 ---
 
@@ -140,7 +145,7 @@ The guardrail system has five layers:
 - **Layer 2: Narrow prompts.** Each AI section receives only the data it needs. Per-SKU recommendations receive one product at a time to prevent cross-item contamination. Month-to-coefficient mappings are pre-computed in Python so the LLM never interprets raw seasonal arrays.
 - **Layer 3: Constrained output.** The system prompt bans causal speculation (phrases like "likely due to", "caused by", "driven by"), limits recommendations to five allowed actions (reorder now, expedite review, monitor closely, investigate stale OOS, verify reorder point), and forbids references to external entities not in the data (no market trends, competitor activity, or supplier details beyond what is provided).
 - **Layer 4: Post-generation validation.** After each AI response, Python scans for unknown SKUs, banned causal phrases, unauthorized action recommendations, and external entity references. If validation fails, the text is regenerated once. If it fails again, the system falls back to deterministic templates.
-- **Layer 5: Graceful fallback.** If the API key is not set, the API is unreachable, or validation fails, every section renders using Python-generated template text. The dashboard is fully functional without AI. Cost per full AI run is approximately $0.09.
+- **Layer 5: Graceful fallback.** If the API key is not set, the API is unreachable, or validation fails, every section renders using Python-generated template text. The dashboard is fully functional without AI. Cost per full AI run is approximately $0.09 (based on Claude Sonnet with 168 SKUs, 15 per-SKU recommendation calls, and approximately 8,000 total output tokens across all sections).
 
 ---
 
@@ -232,15 +237,16 @@ Claude Code served as the development assistant for building the entire tool. Sp
 - Wrote all Python code (data loading, analysis pipeline, AI integration, HTML generation, CLI)
 - Wrote all JavaScript for the interactive dashboard (sorting, filtering, search, settings persistence, live recalculation)
 - Generated the synthetic dataset with realistic equestrian product distributions
-- Built the Tailwind CSS dashboard with dark theme, responsive layout, and print styles
+- Built the Tailwind CSS dashboard with light theme styled to match the Schneider Saddlery website, responsive layout, and print styles
 
 ### Claude API (Sonnet, Runtime Insights)
 
-The deployed tool calls Claude Sonnet (temperature 0.3) at runtime for three distinct purposes:
+The deployed tool calls Claude Sonnet (temperature 0.3) at runtime for up to 18 API calls across four sections:
 
-1. **Executive Summary:** Receives aggregated stats, flag/tier distributions, top urgent items, category breakdowns with seasonal data, and investigation items. Returns a 3-4 paragraph briefing suitable for a Monday morning operations meeting.
-2. **Per-SKU Recommendations:** Receives detailed data for Critical/High tier items with Red/Purple flags. Returns 1-2 sentence actionable recommendations per SKU, referencing specific velocity, lead time, seasonal trend, and profit data.
-3. **Category Patterns:** Receives category aggregations with supplier distributions and seasonal coefficients. Returns category-level analysis identifying concentration risks, seasonal observations, and investigation notes for long-OOS items.
+1. **Executive Summary (1 call):** Receives aggregated stats, flag/tier distributions, top urgent items, category breakdowns with seasonal data, and investigation items. Returns a 3-4 paragraph briefing suitable for a Monday morning operations meeting.
+2. **Category Patterns (1 call):** Receives category aggregations with supplier distributions and seasonal coefficients. Returns category-level analysis identifying concentration risks, seasonal observations, and investigation notes for long-OOS items.
+3. **Investigation Summary (1 call):** Receives data on long-OOS and stale inventory items. Returns analysis of items requiring manual review.
+4. **Per-SKU Recommendations (up to 15 calls):** Each Critical/High tier item with a Red/Purple flag gets its own individual API call. Receives detailed data for one product at a time to prevent cross-item contamination. Returns 1-2 sentence actionable recommendations referencing specific velocity, lead time, seasonal trend, and profit data.
 
 All AI outputs are clearly labeled in the dashboard and are optional. The tool functions fully without them.
 
