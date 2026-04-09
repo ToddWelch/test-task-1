@@ -468,9 +468,10 @@ SYSTEM_MESSAGE = (
     "\"caused by\", \"driven by\", \"because of\", \"as a result of\", or "
     "\"attributed to\". If root cause is unknown, say \"requires investigation.\"\n"
     "- Only recommend these actions: reorder now, expedite review, monitor "
-    "closely, investigate stale OOS, verify reorder point. Do not suggest "
-    "supplier switches, pricing changes, marketing actions, or other "
-    "operational moves not supported by the data.\n"
+    "closely, investigate stale OOS, verify reorder point, find alternative "
+    "supplier, formally discontinue. Do not suggest supplier switches, "
+    "pricing changes, marketing actions, or other operational moves not "
+    "supported by the data.\n"
     "- Only reference SKUs, product names, categories, and suppliers that "
     "appear in the provided data. Do not mention brands, regions, channels, "
     "warehouses, customer segments, or market conditions not in the data.\n"
@@ -507,8 +508,11 @@ def validate_ai_output(text, products, stats):
             warnings.append(f"Contains banned causal phrase: '{phrase}'")
 
     # Check for unauthorized action recommendations
+    # "find alternative supplier" and "formally discontinue" are allowed actions.
+    # "switch supplier" and "change supplier" remain banned (too specific).
+    # "switch to" catches "switch to [specific supplier name]" recommendations.
     action_phrases = [
-        "switch supplier", "change supplier", "find new supplier",
+        "switch supplier", "change supplier", "switch to",
         "adjust pricing", "raise price", "lower price",
         "run promotion", "increase marketing", "discount"
     ]
@@ -687,7 +691,8 @@ def format_sku_prompt(item):
         f"- Peak month: {seasonal['peak_month']} at {seasonal['peak_coeff']}x\n"
         f"- Low month: {seasonal['low_month']} at {seasonal['low_coeff']}x\n\n"
         "ALLOWED ACTIONS: reorder now, expedite review, monitor closely, "
-        "investigate stale OOS, verify reorder point.\n\n"
+        "investigate stale OOS, verify reorder point, find alternative "
+        "supplier, formally discontinue.\n\n"
         "Write exactly 2-3 sentences. Sentence 1: What to do and why (order X units, "
         "expected to arrive by Y, covering Z days of demand). Sentence 2: The financial "
         "context (how much profit is at risk or already missed). Sentence 3 (if relevant): "
