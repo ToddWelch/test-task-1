@@ -1349,8 +1349,9 @@ def generate_html(data, ai_results, config=None):
                 <p class="text-3xl font-bold mt-1" style="color: #FBEAEA" id="stat_oos">{summary['oos_count']}</p>
             </div>
             <div class="stat-card rounded-lg p-4" style="background: rgba(255,255,255,0.1);">
-                <p class="text-sm uppercase tracking-wider" style="color: rgba(255,255,255,0.7);">At Risk</p>
+                <p class="text-sm uppercase tracking-wider" style="color: rgba(255,255,255,0.7);">Total Flagged</p>
                 <p class="text-3xl font-bold mt-1" style="color: #FBEAEA" id="stat_atrisk">{summary['at_risk_count']}</p>
+                <p class="text-xs mt-1" style="color: rgba(255,255,255,0.5);">OOS + Restock + Soon</p>
             </div>
             <div class="stat-card rounded-lg p-4" style="background: rgba(255,255,255,0.1);">
                 <p class="text-sm uppercase tracking-wider" style="color: rgba(255,255,255,0.7);">Est Daily Revenue Lost</p>
