@@ -1,1 +1,240 @@
-# test-task-1
+# AI-Powered Out-of-Stock Intelligence Tool
+
+A Python-based inventory analysis tool that generates a self-contained HTML dashboard with seasonally-projected out-of-stock detection, two-layer risk scoring, and AI-generated insights via Claude API.
+
+Built for the Schneider Saddlery technical assessment.
+
+---
+
+## Architecture Overview
+
+### End-to-End Flow
+
+```
+inventory.csv  -->  Python Analysis Engine  -->  Claude API (optional)  -->  Self-contained HTML Dashboard
+                    (seasonal projection,       (executive summary,
+                     urgency flags,              per-SKU recs,
+                     risk tiers,                 category patterns)
+                     financial scoring)
+```
+
+The tool separates concerns cleanly:
+
+1. **Data loading** reads any CSV with the expected columns and converts types
+2. **Seasonal projection engine** walks forward day-by-day through the calendar consuming stock at seasonally-adjusted rates
+3. **Scoring engine** applies deterministic, configurable rules for urgency flags and financial risk tiers
+4. **AI layer** makes 3 Claude API calls for natural language insights (gracefully optional)
+5. **HTML generator** produces a single self-contained file with embedded data, Tailwind CSS from CDN, and full client-side interactivity
+
+### Two-Layer Scoring: Why Separate Urgency from Financial Impact
+
+A naive implementation makes flags and tiers redundant. I separated them because that is how real operators make decisions:
+
+- **Urgency Flags** answer "When do I need to act?" A product can be Red (needs restock now) but only Watch tier (low financial impact). The operator knows it is urgent but not a priority over bigger items.
+- **Risk Tiers** answer "Where should I focus?" A product can be Healthy (plenty of stock) but Critical tier ($5K+/month in profit). The operator knows to keep an eye on it even though it is not urgent today.
+
+The sort algorithm combines both: flag weight (urgency) plus monthly profit at risk (financial impact). This puts the worst combination (OOS + Critical) at the top and Healthy + Watch at the bottom.
+
+### Seasonal Projection vs. Flat Velocity
+
+Most inventory tools divide current stock by current velocity to get "days of stock." This is misleading during seasonal transitions. A blanket with 100 days of stock at April velocity (0.40x base) has far less coverage when you account for September (0.70x) through December (1.70x).
+
+The projection engine walks forward day by day through the calendar, applying the correct monthly coefficient for each day. When flat and projected values diverge by more than 15%, the dashboard shows a seasonal indicator badge so the operator understands why the numbers differ.
+
+A production system would use per-product curves trained on 2+ years of historical data rather than category-level coefficients.
+
+---
+
+## How to Run
+
+### Prerequisites
+
+- Python 3.9+
+- (Optional) Anthropic API key for AI insights
+
+### Installation
+
+```bash
+pip install -r requirements.txt
+```
+
+### Generate Sample Data
+
+The sample dataset is included at `sample_data/inventory.csv`. To regenerate it:
+
+```bash
+python generate_data.py
+```
+
+This creates 168 SKUs across 10 equestrian product categories with realistic velocity distributions, pricing, and stock scenarios.
+
+### Run the Tool
+
+```bash
+# With AI insights (requires ANTHROPIC_API_KEY)
+export ANTHROPIC_API_KEY=your-key-here
+python oos_tool.py
+
+# Without AI (dashboard renders with all quantitative data)
+python oos_tool.py --no-ai
+
+# Custom input/output paths
+python oos_tool.py --input custom_inventory.csv --output reports/my_report.html
+```
+
+### View the Report
+
+Open `output/oos_report.html` in any modern browser. No server required.
+
+---
+
+## Fulfil.io Integration Plan
+
+Reference: [Fulfil.io Developer Documentation](https://developers.fulfil.io)
+
+### Authentication
+
+Fulfil supports Personal Access Tokens for server-to-server integrations and OAuth2 for user-facing apps. All API calls go to `https://{tenant}.fulfil.io/api/v2/` over HTTPS.
+
+### Relevant Models
+
+| Fulfil Model | Maps To | Data Pulled |
+|---|---|---|
+| `product.product` | SKU, name, category, cost, price | Product master data with cost and pricing fields |
+| `stock.move` | Velocity calculation | Historical stock movements; aggregate by product over 7d/30d/90d windows to derive velocity |
+| `stock.location` | Multi-warehouse support | Warehouse locations for per-location stock levels |
+| `purchase.line` | Lead times, last restock dates | PO-to-receipt history gives actual lead time distributions; latest receipt date becomes last_restock_date |
+| `stock.inventory` | Current stock levels | Real-time on-hand quantities per product per location |
+
+### Data Flow
+
+A scheduled Python job pulls inventory snapshots every 4-6 hours via the REST API. Stock moves are pulled daily for velocity calculation (7-day, 30-day, 90-day weighted windows). Data is stored in PostgreSQL for historical trending. The dashboard regenerates on each pull.
+
+### Sync Strategy
+
+- **Incremental updates:** Filter by `write_date` on each model to pull only records changed since last sync
+- **Full reconciliation:** Weekly full pull to catch any missed incremental updates
+- **Idempotent upserts:** All sync operations use upsert logic keyed on Fulfil record IDs
+
+### BigQuery and Shopify
+
+Fulfil offers managed BigQuery export for analytics workloads. This is ideal for long-term velocity trend analysis and historical reporting. The REST API handles real-time stock level queries.
+
+Fulfil has native Shopify Plus integration. In a Schneider deployment, Fulfil would be the inventory source of truth, with Shopify reading from Fulfil for storefront availability.
+
+---
+
+## AI Guardrails
+
+The AI layer follows strict principles:
+
+- **Data-only recommendations:** Every AI claim must be traceable to specific data points passed in the prompt. The AI receives the exact numbers and is instructed to reference them.
+- **Deterministic scoring:** All flag assignments, risk tiers, urgency scores, and order quantities are calculated by deterministic Python code. The AI handles natural language generation only.
+- **Temperature 0.3:** Low creativity, high consistency. The AI summarizes and recommends; it does not speculate.
+- **Graceful degradation:** If the API key is missing, the API call fails, or `--no-ai` is passed, the dashboard renders fully with all quantitative data. AI sections show clear "AI insights unavailable" placeholders with instructions for enabling.
+- **Environment variable only:** The API key is read from `ANTHROPIC_API_KEY`. It is never hardcoded, logged, or embedded in output.
+- **Flags, not auto-execution:** The tool recommends actions. It does not place orders, modify inventory, or trigger any external system.
+
+---
+
+## Business Impact Metrics
+
+### Primary KPI: Reduction in OOS Events
+
+The tool catches items before they go OOS by comparing projected coverage (accounting for seasonality and lead times) against restock windows. Success is measured by month-over-month reduction in items reaching the Purple (OOS) flag.
+
+### Revenue Recovery
+
+- **Monthly profit at risk:** The sum of daily profit times 30 for all Red and Purple items. This number should trend downward as operators restock earlier.
+- **Missed profit reduction:** For items already OOS, the tool calculates estimated profit lost during the stockout. Catching items at Yellow instead of waiting until Purple directly reduces this number.
+
+### Operational Efficiency
+
+- **Restock timing improvement:** Track the average urgency score at the time an order is placed. The goal is to shift from reactive (Red, urgency < 0) to proactive (Yellow/Blue, urgency 0-30).
+- **Category health distribution:** The percentage of SKUs in each flag should shift toward Green over time.
+- **Time savings:** The dashboard consolidates analysis that would otherwise require spreadsheet work across multiple data sources.
+
+### Margin Note
+
+Profit calculations use gross margin (unit price minus unit cost). A production deployment would factor in Shopify fees (2.4-2.9% + $0.30), payment processing, warehouse labor and storage, shipping, and returns, which typically reduce gross margin by 15-25 percentage points. The settings panel would support a margin adjustment factor.
+
+---
+
+## Seasonality Documentation
+
+The tool projects consumption forward using monthly coefficients per category rather than flat velocity. Each category has 12 coefficients (January through December) that multiply the base annual average velocity.
+
+**Example:** A blanket product with base velocity 8.75 units/day:
+- April (coefficient 0.40): actual daily demand = 3.5 units
+- September (coefficient 0.70): actual daily demand = 6.1 units
+- December (coefficient 1.70): actual daily demand = 14.9 units
+
+The projection walks forward day by day, applying the correct coefficient for each month boundary crossed. This means an item with 200 units of stock in April is not simply 200 / 3.5 = 57 days of stock. Accounting for the increasing coefficients through spring and summer, actual coverage may be significantly different.
+
+Categories with distinct seasonal patterns:
+- **Blankets and Sheets:** Peak Oct-Dec (1.10x to 1.70x), trough Jun-Jul (0.20x)
+- **Fly and Insect Control:** Peak May-Aug (1.40x to 1.70x), trough Dec-Jan (0.20x to 0.30x)
+- **Supplements and Health:** Moderate seasonality, peak Nov-Dec (1.10x to 1.30x)
+- **All other categories:** Follow a general retail pattern peaking in holiday season
+
+A production system would replace these category-level coefficients with per-product curves trained on 2+ years of sales history, enabling much more precise projections for individual SKUs.
+
+---
+
+## Reorder Quantity Note
+
+The recommended order quantity projects consumption over the full coverage window: total lead time (supplier lead + shipping + receiving buffer) plus configurable buffer days plus target stock days. Current stock is subtracted from total projected consumption.
+
+Default target is 60 days on hand after restock arrives. This is configurable in the dashboard settings panel. A production system would configure per product or category. Overseas products with 70-96 day lead times would typically target 90-120 days of stock to provide adequate safety margin against supply chain variability.
+
+---
+
+## Roadmap
+
+1. **Weighted velocity windows:** Use 7-day, 30-day, and 90-day sales windows with configurable weights (e.g., 50% / 30% / 20%) for more responsive velocity detection
+2. **Per-product seasonality curves:** Train on 2+ years of historical sales data per SKU, replacing category-level coefficients
+3. **Supplier performance tracking:** Track actual vs. quoted lead times, on-time delivery rates, and fill rates per supplier
+4. **Automated PO generation:** Generate purchase orders in Fulfil with manager approval workflow, using recommended quantities from the tool
+5. **Alerts and notifications:** Slack and email alerts with daily digest and escalation for items in Critical tier for 48+ hours
+6. **Multi-warehouse support:** Per-location stock analysis with transfer recommendations between warehouses
+7. **OOS recovery velocity:** When a product returns from OOS, model demand recovery at 75% of historical rate for the first 30 days
+8. **Historical trend dashboard:** Track OOS rate, forecast accuracy, and category health distribution over time to measure tool effectiveness
+
+---
+
+## AI Tools Used
+
+### Claude Code (Development)
+
+Claude Code served as the development assistant for building the entire tool. Specifically:
+
+- Designed the architecture (seasonal projection engine, two-layer scoring, HTML dashboard structure)
+- Wrote all Python code (data loading, analysis pipeline, AI integration, HTML generation, CLI)
+- Wrote all JavaScript for the interactive dashboard (sorting, filtering, search, settings persistence, live recalculation)
+- Generated the synthetic dataset with realistic equestrian product distributions
+- Built the Tailwind CSS dashboard with dark theme, responsive layout, and print styles
+
+### Claude API (Sonnet, Runtime Insights)
+
+The deployed tool calls Claude Sonnet (temperature 0.3) at runtime for three distinct purposes:
+
+1. **Executive Summary:** Receives aggregated stats, flag/tier distributions, top urgent items, category breakdowns with seasonal data, and investigation items. Returns a 3-4 paragraph briefing suitable for a Monday morning operations meeting.
+2. **Per-SKU Recommendations:** Receives detailed data for Critical/High tier items with Red/Purple flags. Returns 1-2 sentence actionable recommendations per SKU, referencing specific velocity, lead time, seasonal trend, and profit data.
+3. **Category Patterns:** Receives category aggregations with supplier distributions and seasonal coefficients. Returns category-level analysis identifying concentration risks, seasonal observations, and investigation notes for long-OOS items.
+
+All AI outputs are clearly labeled in the dashboard and are optional. The tool functions fully without them.
+
+---
+
+## Time Spent
+
+| Phase | Time |
+|---|---|
+| Data generation and synthetic dataset | 0.5 hours |
+| Build plan and architecture design | 1.0 hours |
+| Seasonal projection engine and scoring | 1.0 hours |
+| AI integration layer | 0.5 hours |
+| HTML dashboard (layout, interactivity, JS) | 2.0 hours |
+| README and documentation | 1.0 hours |
+| Testing and refinement | 0.5 hours |
+| **Total** | **6.5 hours** |
