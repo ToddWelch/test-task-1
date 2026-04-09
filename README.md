@@ -1,6 +1,6 @@
 # AI-Powered Out-of-Stock Intelligence Tool
 
-A Python-based inventory analysis tool that generates a self-contained HTML dashboard with seasonally-projected out-of-stock detection, two-layer risk scoring, and AI-generated insights via Claude API.
+A Python-based inventory analysis tool that generates a single-file HTML dashboard (Tailwind CSS via CDN requires internet) with seasonally-projected out-of-stock detection, two-layer risk scoring, and AI-generated insights via Claude API.
 
 Built for the Schneider Saddlery technical assessment.
 
@@ -11,7 +11,7 @@ Built for the Schneider Saddlery technical assessment.
 ### End-to-End Flow
 
 ```
-inventory.csv  -->  Python Analysis Engine  -->  Claude API (optional)  -->  Self-contained HTML Dashboard
+inventory.csv  -->  Python Analysis Engine  -->  Claude API (optional)  -->  Single-file HTML Dashboard
                     (seasonal projection,       (executive summary,
                      urgency flags,              per-SKU recs,
                      risk tiers,                 category patterns)
@@ -20,15 +20,15 @@ inventory.csv  -->  Python Analysis Engine  -->  Claude API (optional)  -->  Sel
 
 The tool separates concerns cleanly:
 
-1. **Data loading** reads any CSV with the expected columns and converts types
+1. **Data loading** reads any CSV with the expected columns and converts types. Includes input validation: checks for required columns, non-negative stock and velocity values, date parsing, and duplicate SKU detection. Validation warnings are printed to console during processing
 2. **Seasonal projection engine** walks forward day-by-day through the calendar consuming stock at seasonally-adjusted rates
 3. **Scoring engine** applies deterministic, configurable rules for urgency flags and financial risk tiers
 4. **AI layer** makes 3 Claude API calls for natural language insights (gracefully optional)
-5. **HTML generator** produces a single self-contained file with embedded data, Tailwind CSS from CDN, and full client-side interactivity
+5. **HTML generator** produces a single-file HTML report with embedded data and interactive JavaScript (Tailwind CSS loaded via CDN requires internet access for styling)
 
 ### Two-Layer Scoring: Why Separate Urgency from Financial Impact
 
-A naive implementation makes flags and tiers redundant. I separated them because that is how real operators make decisions:
+A simpler implementation would collapse flags and tiers into one dimension. I separated them because that is how real operators make decisions:
 
 - **Urgency Flags** answer "When do I need to act?" A product can be Red (needs restock now) but only Watch tier (low financial impact). The operator knows it is urgent but not a priority over bigger items.
 - **Risk Tiers** answer "Where should I focus?" A product can be Healthy (plenty of stock) but Critical tier ($5K+/month in profit). The operator knows to keep an eye on it even though it is not urgent today.
@@ -86,6 +86,10 @@ python oos_tool.py --input custom_inventory.csv --output reports/my_report.html
 
 Open `output/oos_report.html` in any modern browser. No server required.
 
+### Lead Time Fields
+
+The assessment brief specifies a lead_time_days field. This tool provides more granular data: supplier_lead_time, shipping_time, and receiving_buffer. Total lead time is derived as the sum of all three, enabling per-component analysis. The tool also accepts a single lead_time column as a fallback if the three-column breakdown is not available.
+
 ---
 
 ## Fulfil.io Integration Plan
@@ -106,6 +110,8 @@ Fulfil supports Personal Access Tokens for server-to-server integrations and OAu
 | `purchase.line` | Lead times, last restock dates | PO-to-receipt history gives actual lead time distributions; latest receipt date becomes last_restock_date |
 | `stock.inventory` | Current stock levels | Real-time on-hand quantities per product per location |
 
+Model names are publicly documented in Fulfil's official Python client library (github.com/fulfilio/fulfil-python-api) and confirmed via third-party integration documentation. Rate limits are 1000+ requests per minute. The API uses standard REST with JSON payloads.
+
 ### Data Flow
 
 A scheduled Python job pulls inventory snapshots every 4-6 hours via the REST API. Stock moves are pulled daily for velocity calculation (7-day, 30-day, 90-day weighted windows). Data is stored in PostgreSQL for historical trending. The dashboard regenerates on each pull.
@@ -120,20 +126,21 @@ A scheduled Python job pulls inventory snapshots every 4-6 hours via the REST AP
 
 Fulfil offers managed BigQuery export for analytics workloads. This is ideal for long-term velocity trend analysis and historical reporting. The REST API handles real-time stock level queries.
 
-Fulfil has native Shopify Plus integration. In a Schneider deployment, Fulfil would be the inventory source of truth, with Shopify reading from Fulfil for storefront availability.
+Fulfil has native Shopify Plus integration. In a Schneider deployment, Fulfil would be the inventory source of truth, with Shopify reading from Fulfil for storefront availability. Fulfil is SOC 2 Type II compliant with data encrypted at rest on Google Cloud infrastructure.
 
 ---
 
 ## AI Guardrails
 
-The AI layer follows strict principles:
+Claude does not analyze inventory. Python analyzes inventory. Claude converts validated metrics into business-readable language.
 
-- **Data-only recommendations:** Every AI claim must be traceable to specific data points passed in the prompt. The AI receives the exact numbers and is instructed to reference them.
-- **Deterministic scoring:** All flag assignments, risk tiers, urgency scores, and order quantities are calculated by deterministic Python code. The AI handles natural language generation only.
-- **Temperature 0.3:** Low creativity, high consistency. The AI summarizes and recommends; it does not speculate.
-- **Graceful degradation:** If the API key is missing, the API call fails, or `--no-ai` is passed, the dashboard renders fully with all quantitative data. AI sections show clear "AI insights unavailable" placeholders with instructions for enabling.
-- **Environment variable only:** The API key is read from `ANTHROPIC_API_KEY`. It is never hardcoded, logged, or embedded in output.
-- **Flags, not auto-execution:** The tool recommends actions. It does not place orders, modify inventory, or trigger any external system.
+The guardrail system has five layers:
+
+- **Layer 1: Deterministic computation.** All metrics (flags, tiers, urgency scores, projected days, profit at risk, recommended quantities) are computed in Python. The LLM receives pre-computed results only.
+- **Layer 2: Narrow prompts.** Each AI section receives only the data it needs. Per-SKU recommendations receive one product at a time to prevent cross-item contamination. Month-to-coefficient mappings are pre-computed in Python so the LLM never interprets raw seasonal arrays.
+- **Layer 3: Constrained output.** The system prompt bans causal speculation (phrases like "likely due to", "caused by", "driven by"), limits recommendations to five allowed actions (reorder now, expedite review, monitor closely, investigate stale OOS, verify reorder point), and forbids references to external entities not in the data (no market trends, competitor activity, or supplier details beyond what is provided).
+- **Layer 4: Post-generation validation.** After each AI response, Python scans for unknown SKUs, banned causal phrases, unauthorized action recommendations, and external entity references. If validation fails, the text is regenerated once. If it fails again, the system falls back to deterministic templates.
+- **Layer 5: Graceful fallback.** If the API key is not set, the API is unreachable, or validation fails, every section renders using Python-generated template text. The dashboard is fully functional without AI. Cost per full AI run is approximately $0.09.
 
 ---
 
@@ -186,6 +193,19 @@ A production system would replace these category-level coefficients with per-pro
 The recommended order quantity projects consumption over the full coverage window: total lead time (supplier lead + shipping + receiving buffer) plus configurable buffer days plus target stock days. Current stock is subtracted from total projected consumption.
 
 Default target is 60 days on hand after restock arrives. This is configurable in the dashboard settings panel. A production system would configure per product or category. Overseas products with 70-96 day lead times would typically target 90-120 days of stock to provide adequate safety margin against supply chain variability.
+
+---
+
+## Limitations
+
+- Synthetic data only; not connected to a live inventory system
+- Seasonality uses category-level monthly coefficients, not per-SKU forecast curves trained on historical data
+- No live purchase order or warehouse capacity constraints
+- Profit at risk uses gross margin (unit price minus unit cost); does not factor in Shopify fees, payment processing, warehouse labor, shipping, or returns
+- Missed profit estimate uses a heuristic approximation (last restock date + 30 days), not actual stock-zero dates from inventory movement history
+- Single-warehouse model; does not account for multi-location inventory or in-transit stock
+- AI insights are generated at build time, not live/interactive in the browser
+- Dashboard styling requires internet access for Tailwind CSS via CDN
 
 ---
 

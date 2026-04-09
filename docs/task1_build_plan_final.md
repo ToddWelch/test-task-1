@@ -324,7 +324,7 @@ All formulas, thresholds, seasonality explanation.
 ### 1. Architecture Overview
 - End-to-end flow (CSV -> Python analysis -> Claude API -> HTML)
 - Two-layer scoring: urgency flags + financial risk tiers
-- Why separate: "A naive implementation makes flags and tiers redundant. I separated them because that's how real operators make decisions. The flags tell you WHEN to act (urgency). The risk tiers tell you WHERE to focus (impact)."
+- Why separate: "A simpler implementation would collapse flags and tiers into one dimension. I separated them because that's how real operators make decisions. The flags tell you WHEN to act (urgency). The risk tiers tell you WHERE to focus (impact)."
 - Seasonal projection vs flat velocity
 - Design decisions
 
