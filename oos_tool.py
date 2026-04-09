@@ -649,11 +649,17 @@ def format_executive_prompt(products, categories, stats):
     return prompt
 
 
-def format_sku_prompt(item):
+def format_sku_prompt(item, config=None):
     """Build the user message for a single per-SKU recommendation."""
+    cfg = config or DEFAULT_CONFIG
     trend = item["trend"]
-    current_month = datetime.now().month
+    today = date.today()
+    current_month = today.month
     seasonal = format_seasonal_context(item["category"], current_month)
+
+    # Pre-compute arrival date and coverage days
+    arrival_date = (today + timedelta(days=item['total_lead_time'])).strftime("%Y-%m-%d")
+    coverage_days = cfg["target_stock_days"]
 
     # Trend description
     if seasonal["direction"] == "increasing":
@@ -679,6 +685,8 @@ def format_sku_prompt(item):
         f"- Estimated OOS date: {item['est_oos_date'] or 'N/A'}\n"
         f"- Urgency score: {item['urgency_score']} days\n"
         f"- Total lead time: {item['total_lead_time']} days\n"
+        f"- Estimated arrival date if ordered today: {arrival_date}\n"
+        f"- Target coverage after restock: {coverage_days} days\n"
         f"- Flag: {item['flag']}\n"
         f"- Tier: {item['risk_tier']}\n"
         f"- Monthly profit at risk: ${item['monthly_profit_at_risk']:,.2f}\n"
@@ -693,8 +701,9 @@ def format_sku_prompt(item):
         "ALLOWED ACTIONS: reorder now, expedite review, monitor closely, "
         "investigate stale OOS, verify reorder point, find alternative "
         "supplier, formally discontinue.\n\n"
-        "Write exactly 2-3 sentences. Sentence 1: What to do and why (order X units, "
-        "expected to arrive by Y, covering Z days of demand). Sentence 2: The financial "
+        "Write exactly 2-3 sentences. Sentence 1: What to do and why (order "
+        f"{item['recommended_qty']} units, estimated arrival {arrival_date}, "
+        f"covering {coverage_days} days of demand). Sentence 2: The financial "
         "context (how much profit is at risk or already missed). Sentence 3 (if relevant): "
         "Any seasonal consideration (demand increasing/decreasing, order ahead of peak, etc.). "
         "Do not repeat the product name or SKU since it will be displayed next to the product row."
