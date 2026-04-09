@@ -561,13 +561,13 @@ def analyze_inventory(products, config=None, today=None):
         if p["current_stock"] == 0:
             last_dt = datetime.strptime(p["last_restock_date"], "%Y-%m-%d").date()
             days_since = (today - last_dt).days
+            item["estimated_days_oos"] = max(0, days_since - 30)
             if days_since >= 60:
-                item["days_since_restock"] = days_since
                 needs_investigation.append(item)
 
     # Sort by sort_score descending
     analyzed.sort(key=lambda x: x["sort_score"], reverse=True)
-    needs_investigation.sort(key=lambda x: x.get("days_since_restock", 0), reverse=True)
+    needs_investigation.sort(key=lambda x: x.get("estimated_days_oos", 0), reverse=True)
 
     summary["daily_revenue_lost"] = round(summary["daily_revenue_lost"], 2)
     summary["monthly_profit_at_risk"] = round(summary["monthly_profit_at_risk"], 2)
@@ -949,16 +949,11 @@ def format_investigation_prompt(stale_items, combined_monthly, combined_missed):
     """Build the user message for the needs-investigation prompt."""
     item_lines = []
     for p in stale_items:
-        est_days_oos = p.get("days_since_restock", 0)
-        if est_days_oos > 30:
-            est_days_oos = est_days_oos - 30
-        else:
-            est_days_oos = 0
         item_lines.append(
             f"- {p['sku']} {p['product_name']} | Category: {p['category']} | "
             f"Supplier: {p['supplier']} | Base velocity: {p['base_velocity']}/day | "
             f"Last restock: {p['last_restock_date']} | "
-            f"Estimated days OOS: ~{est_days_oos} | "
+            f"Estimated days OOS: ~{p.get('estimated_days_oos', 0)} | "
             f"Monthly profit when in stock: ${p['monthly_profit_at_risk']:,.2f} | "
             f"Estimated missed profit: ${p['missed_profit']:,.2f}"
         )
@@ -1294,7 +1289,7 @@ def generate_html(data, ai_results, config=None):
                         <span class="text-[#555555] ml-2">{esc(p['product_name'])}</span>
                     </div>
                     <span class="inline-flex items-center whitespace-nowrap text-sm px-2 py-1 rounded-full" style="background: #CC000015; color: #CC0000">
-                        OOS ~{p.get('days_since_restock', 'N/A')} days
+                        OOS ~{p.get('estimated_days_oos', 0)} days
                     </span>
                 </div>
                 <div class="mt-2 text-sm text-[#555555]">
