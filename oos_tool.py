@@ -289,17 +289,47 @@ def load_data(filepath):
     else:
         raise ValueError(f"Unsupported file format: {ext}. Use .csv or .json.")
 
+    # Determine lead time mode from first row
+    sample = raw_rows[0] if raw_rows else {}
+    has_split_lead = all(
+        col in sample
+        for col in ("supplier_lead_time", "shipping_time", "receiving_buffer")
+    )
+    has_single_lead = "lead_time" in sample
+    default_lead = DEFAULT_CONFIG["default_lead_time"]
+
+    if has_split_lead:
+        lead_mode = "split"
+        print("  Lead time mode: split columns (supplier_lead_time + shipping_time + receiving_buffer)")
+    elif has_single_lead:
+        lead_mode = "single"
+        print("  Lead time mode: single lead_time column")
+    else:
+        lead_mode = "default"
+        print(f"  Lead time mode: using default ({default_lead} days for all products)")
+
     products = []
     for row in raw_rows:
         row["current_stock"] = int(row["current_stock"])
-        row["reorder_point"] = int(row["reorder_point"])
-        row["supplier_lead_time"] = int(row["supplier_lead_time"])
-        row["shipping_time"] = int(row["shipping_time"])
-        row["receiving_buffer"] = int(row["receiving_buffer"])
+        row["reorder_point"] = int(row.get("reorder_point", 0))
         row["base_velocity"] = float(row["base_velocity"])
         row["avg_daily_velocity"] = float(row["avg_daily_velocity"])
         row["unit_cost"] = float(row["unit_cost"])
         row["unit_price"] = float(row["unit_price"])
+
+        if lead_mode == "split":
+            row["supplier_lead_time"] = int(row["supplier_lead_time"])
+            row["shipping_time"] = int(row["shipping_time"])
+            row["receiving_buffer"] = int(row["receiving_buffer"])
+        elif lead_mode == "single":
+            row["supplier_lead_time"] = int(row["lead_time"])
+            row["shipping_time"] = 0
+            row["receiving_buffer"] = 0
+        else:
+            row["supplier_lead_time"] = default_lead
+            row["shipping_time"] = 0
+            row["receiving_buffer"] = 0
+
         products.append(row)
     return products
 
@@ -335,16 +365,9 @@ def validate_data(rows):
             "Cannot proceed without these fields."
         )
 
-    # Check lead time columns
-    has_split_lead = all(
-        col in sample
-        for col in ("supplier_lead_time", "shipping_time", "receiving_buffer")
-    )
-    has_single_lead = "lead_time" in sample
-    if not has_split_lead and not has_single_lead:
-        warnings.append(
-            "No lead time columns found. Will use default lead time from config."
-        )
+    # Lead time columns are handled by load_data() with fallback logic.
+    # By this point, supplier_lead_time, shipping_time, and receiving_buffer
+    # are already set on every row.
 
     # Validate each row
     non_negative_fields = [
