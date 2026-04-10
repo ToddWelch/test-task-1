@@ -242,7 +242,7 @@ def calculate_risk_tier(monthly_profit_at_risk, config=None):
     elif monthly_profit_at_risk > cfg["medium_threshold"]:
         return "Medium"
     else:
-        return "Low"
+        return "Watch"
 
 
 def calculate_missed_profit(current_stock, last_restock_date, avg_daily_velocity,
@@ -440,7 +440,7 @@ def analyze_inventory(products, config=None, today=None):
         "missed_profit_total": 0.0,
         "flags": {"OOS": 0, "Restock Now": 0, "Restock Soon": 0,
                   "Watch": 0, "Healthy": 0, "No Velocity": 0},
-        "tiers": {"Critical": 0, "High": 0, "Medium": 0, "Low": 0},
+        "tiers": {"Critical": 0, "High": 0, "Medium": 0, "Watch": 0},
     }
     categories = {}
     needs_investigation = []
@@ -1529,7 +1529,7 @@ def generate_html(data, ai_results, config=None):
                     <span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full" style="background:#CC0000"></span> Critical = Over $5,000/mo profit at risk</span>
                     <span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full" style="background:#D97706"></span> High = $1,000-$5,000/mo</span>
                     <span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full" style="background:#2563EB"></span> Medium = $250-$1,000/mo</span>
-                    <span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full" style="background:#6B7280"></span> Low = Under $250/mo</span>
+                    <span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full" style="background:#6B7280"></span> Watch = Under $250/mo profit at risk</span>
                 </div>
             </div>
         </div>
@@ -1552,7 +1552,7 @@ def generate_html(data, ai_results, config=None):
                     <option value="Critical">Critical</option>
                     <option value="High">High</option>
                     <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
+                    <option value="Watch">Watch</option>
                 </select>
                 <select id="filterCategory" onchange="filterTable()" class="text-base">
                     <option value="">All Categories</option>
@@ -1667,8 +1667,8 @@ def generate_html(data, ai_results, config=None):
     const FLAG_COLORS = {json.dumps(FLAG_COLORS).replace('</','<\\/')};
     const FLAG_WEIGHTS = {json.dumps(FLAG_WEIGHTS).replace('</','<\\/')};
 
-    const TIER_ORDER = {{"Critical": 4, "High": 3, "Medium": 2, "Low": 1}};
-    const TIER_WEIGHTS = {{"Critical": 4000000, "High": 3000000, "Medium": 2000000, "Low": 1000000}};
+    const TIER_ORDER = {{"Critical": 4, "High": 3, "Medium": 2, "Watch": 1}};
+    const TIER_WEIGHTS = {{"Critical": 4000000, "High": 3000000, "Medium": 2000000, "Watch": 1000000}};
     const FLAG_ORDER = {{"OOS": 6, "Restock Now": 5, "Restock Soon": 4, "Watch": 3, "No Velocity": 1, "Healthy": 2}};
     const AI_AVAILABLE = {'true' if ai_available else 'false'};
 
@@ -1816,7 +1816,7 @@ def generate_html(data, ai_results, config=None):
             if (monthProfit > cfg.critical_threshold) tier = "Critical";
             else if (monthProfit > cfg.high_threshold) tier = "High";
             else if (monthProfit > cfg.medium_threshold) tier = "Medium";
-            else tier = "Low";
+            else tier = "Watch";
 
             const urgencyScore = Math.round((projDays - (totalLead + cfg.buffer_days)) * 10) / 10;
             const recQty = jsProjectedOrderQty(item.current_stock, item.base_velocity, item.category, curMonth, curDay, totalLead, cfg.buffer_days, cfg.target_stock_days);
@@ -1981,7 +1981,7 @@ def generate_html(data, ai_results, config=None):
 
         products.forEach(function(p, idx) {{
             const flagColor = FLAG_COLORS[p.flag] || '#6B7280';
-            const tierColors = {{"Critical": "#CC0000", "High": "#D97706", "Medium": "#2563EB", "Low": "#6B7280"}};
+            const tierColors = {{"Critical": "#CC0000", "High": "#D97706", "Medium": "#2563EB", "Watch": "#6B7280"}};
             const tierColor = tierColors[p.risk_tier] || '#6B7280';
             const rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F9FAFB';
 
@@ -2225,7 +2225,7 @@ def main():
     if s['flags'].get('No Velocity', 0) > 0:
         print(f"         Gray (No Velocity)={s['flags']['No Velocity']}")
     print(f"  Tiers: Critical={s['tiers']['Critical']} High={s['tiers']['High']} "
-          f"Medium={s['tiers']['Medium']} Low={s['tiers']['Low']}")
+          f"Medium={s['tiers']['Medium']} Watch={s['tiers']['Watch']}")
     ai_status = "Enabled (AI)" if os.environ.get("ANTHROPIC_API_KEY") and not args.no_ai else "Fallback templates"
     print(f"  AI Insights:          {ai_status}")
     print(f"\n  Open {args.output} in a browser to view the report.")
